@@ -4,8 +4,8 @@ from fontTools.ttLib import TTFont, newTable
 pydir=os.path.abspath(os.path.dirname(__file__))
 cfg=json.load(open(os.path.join(pydir, 'configs/config.json'), 'r', encoding='utf-8'))
 
-def setcg(code, glyf):
-	for table in font["cmap"].tables:
+def setcg(cmap, code, glyf):
+	for table in cmap.tables:
 		if (table.format==4 and code<=0xFFFF) or table.format==12 or code in table.cmap:
 			table.cmap[code]=glyf
 def glfrtxt(txt):
@@ -49,7 +49,7 @@ def glfrloc(gl, loclk):
 	for dc in loclk:
 		if gl in dc: return dc[gl]
 
-def locglrpl():
+def locglrpl(newmap):
 	locgls=dict()
 	shset=json.load(open(os.path.join(pydir, 'configs/sourcehan.json'), 'r', encoding='utf-8'))
 	krgl, scgl, tcgl, hcgl=glfrtxt(shset['krgl']), glfrtxt(shset['scgl']), glfrtxt(shset['tcgl']), glfrtxt(shset['hcgl'])
@@ -58,48 +58,24 @@ def locglrpl():
 			assert g1 not in locgls, g1
 			g2=glfrloc(g1, glloc[1])
 			if g2: locgls[g1]=g2
-	return locgls
-def uvstab():
 	cmap=font.getBestCmap()
-	uvsdc, allgls=dict(), set()
-	for table in font["cmap"].tables:
-		if table.format==14:
-			for vsl in table.uvsDict.keys():
-				newl=list()
-				for cg in table.uvsDict[vsl]:
-					if cg[0] not in uvsdc:
-						uvsdc[cg[0]]=dict()
-					if cg[1]==None:
-						newl.append((cg[0], cmap[cg[0]]))
-						uvsdc[cg[0]][vsl]=cmap[cg[0]]
-						allgls.add(cmap[cg[0]])
-					else:
-						newl.append((cg[0], cg[1]))
-						uvsdc[cg[0]][vsl]=cg[1]
-						allgls.add(cg[1])
-				table.uvsDict[vsl]=newl
-	return uvsdc, allgls
-def ftuvstab():
-	cmap=font.getBestCmap()
-	for table in font["cmap"].tables:
-		if table.format==14:
-			for vsl in table.uvsDict.keys():
-				newl=list()
-				for cg in table.uvsDict[vsl]:
-					if cg[1]==cmap[cg[0]]:
-						newl.append((cg[0], None))
-					else:
-						newl.append((cg[0], cg[1]))
-				table.uvsDict[vsl]=newl
-def setuvs():
+	for cd in cmap:
+		if cmap[cd] in locgls:
+			assert cd not in newmap, chr(cd)
+			newmap[cd]=locgls[cmap[cd]]
+
+def setuvs(newmap, uvdic):
 	uvcfg=json.load(open(os.path.join(pydir, 'configs/uvs.json'), 'r', encoding='utf-8'))
 	tv=dict()
 	for ch in uvcfg.keys():
 		tv[ord(ch)]=int(uvcfg[ch], 16)
 	for k in uvdic.keys():
 		if k in tv and tv[k] in uvdic[k]:
-			print('Remapping uvs', chr(k))
-			setcg(k, uvdic[k][tv[k]])
+			g=uvdic[k][tv[k]]
+			if k in newmap:
+				if newmap[k]==g: continue
+				else: raise RuntimeError(chr(k), newmap[k], g)
+			newmap[k]=g
 def glfruv(fontob, ch, uv):
 	cmapob=fontob.getBestCmap()
 	for table in fontob["cmap"].tables:
@@ -126,37 +102,31 @@ def ckdlg():
 					for ilin in range(len(lg.Component)):
 						if lg.Component[ilin] in rplg:
 							lg.Component[ilin]=rplg[lg.Component[ilin]]
-def getjpv():
+def locvar(newmap):
 	cmap=font.getBestCmap()
-	jpvar=dict()
 	jpvch=[('𰰨', '芲'), ('𩑠', '頙'), ('鄉', '鄕'), ('唧', '喞'), ('概', '槪'), ('𥄳', '眔')]
-	for chs in jpvch:
+	radic=[('⽉', '月'), ('⻁', '虎'), ('⾳', '音'), ('⿓', '龍'), ('⼾', '戶')]
+	for chs in jpvch+radic:
 		if ord(chs[1]) in cmap:
-			jpvar[ord(chs[0])]=cmap[ord(chs[1])]
-	return jpvar
-def locvar():
-	cmap=font.getBestCmap()
+			c=ord(chs[0])
+			assert c not in newmap, chr(c)
+			newmap[c]=cmap[ord(chs[1])]
 	locscv=[('𫜹', '彐'), ('𣽽', '潸')]
 	for lv1 in locscv:
 		if ord(lv1[1]) in cmap:
+			c=ord(lv1[0])
+			assert c not in newmap, chr(c)
 			gv2=glfrloc(cmap[ord(lv1[1])], loczhs)
 			if gv2:
-				print('Processing', lv1[0])
-				setcg(ord(lv1[0]), gv2)
-def uvsvar():
+				newmap[c]=gv2
+
+def uvsvar(newmap, uvdic):
 	uvsmul=[('⺼', '月', 'E0100'), ('𱍐', '示', 'E0100'), ('䶹', '屮', 'E0101'), ('𠾖', '器', 'E0100'), ('𡐨', '壄', 'E0100'), ('𤥨', '琢', 'E0101'), ('𦤀', '臭', 'E0100'), ('𨺓', '隆', 'E0100'), ('𫜸', '叱', 'E0101'), ('廄', '廏', 'E0101'), ('溉', '漑', 'E0102')]
 	for uvm in uvsmul:
 		u1, u2, usel=ord(uvm[0]), ord(uvm[1]), int(uvm[2], 16)
 		if u2 in uvdic and usel in uvdic[u2]:
-			print('Processing', uvm[0])
-			setcg(u1, uvdic[u2][usel])
-def radicv():
-	radic=[('⽉', '月'), ('⻁', '虎'), ('⾳', '音'), ('⿓', '龍'), ('⼾', '戶')]
-	cmap=font.getBestCmap()
-	for chs in radic:
-		if ord(chs[1]) in cmap:
-			print('Processing', chs[0])
-			setcg(ord(chs[0]), cmap[ord(chs[1])])
+			assert u1 not in newmap, chr(u1)
+			newmap[u1]=uvdic[u2][usel]
 
 def rmlk(font, tbnm, i):
 	font[tbnm].table.LookupList.Lookup.pop(i)
@@ -238,6 +208,9 @@ def cffinf():
 		cff.cff[0].CIDFontVersion=float(cfg['fontVersion'])
 		for dic in cff.cff[0].FDArray:
 			dic.FontName=dic.FontName.replace('SourceHan', cfg['fontName'].replace(' ', ''))
+	elif 'glyf' in font:
+		font["head"].yMax = font["hhea"].ascender
+		font["head"].yMin = font["hhea"].descender
 def subgl():
 	cmap=font.getBestCmap()
 	'''Remove hanguo'''
@@ -250,7 +223,6 @@ def subgl():
 	rmopty('jp83')
 	rmopty('jp90')
 	rmopty('calt')
-
 	usedg=set()
 	usedg.add('.notdef')
 	usedg.update(cmap.values())
@@ -339,6 +311,7 @@ def subgl():
 				basecoverage.glyphs=[g for g in basecoverage.glyphs if g in usedg]
 			else:
 				raise
+	
 	nnnd=list()
 	for fl in font.getGlyphOrder():
 		if fl in usedg or fl in ('.notdef', '.null', 'nonmarkingreturn', 'NULL', 'NUL'):
@@ -357,7 +330,6 @@ def subgl():
 	elif 'glyf' in font:
 		font['glyf'].glyphs={g:font['glyf'].glyphs[g] for g in set(nnnd)}
 	font.setGlyphOrder(nnnd)
-
 def mkname(locn, ithw=''):
 	if locn: locn=' '+locn
 	if 'VF' in fpsn: return vfname(locn, ithw)
@@ -389,6 +361,10 @@ def nfname(locn, ithw=''):
 		scn=cfg['fontNameSC']+'等宽'+locn.strip()+hwm
 		tcn=cfg['fontNameTC']+'等寬'+locn.strip()+hwm
 		jpn=cfg['fontNameJP']+'等幅'+locn.strip()+hwm
+	#elif 'Rounded' in fpsn:
+	#	fmlName=cfg['fontName']+' Rounded'+hwm+locn
+	#	scn=cfg['fontNameSC']+'圆角'+locn.strip()+hwm
+	#	tcn=cfg['fontNameTC']+'圓角'+locn.strip()+hwm
 	else: raise
 	ftName=fmlName
 	ftNamesc=scn
@@ -532,7 +508,6 @@ def vfname(locn, hw=''):
 	newnane.setName(ftNamejp, 4, 3, 1, 1041)
 	newnane.setName('ExtraLight', 17, 3, 1, 1041)
 	return newnane
-
 def getother(font2, repdict):
 	print('Processing...')
 	if 'CFF ' in font or 'CFF2' in font:
@@ -583,6 +558,7 @@ def merge(ft):
 			g1=glfrloc(cmap[ncd], loczhs)
 		else:
 			g1=cmap[ncd]
+			# chdgl.add(ncd)
 		g2=cmap2[ncd]
 		gtog[g1]=g2
 	loczhsnew=getloclk(font2, 'ZHS')
@@ -594,7 +570,6 @@ def merge(ft):
 
 	getother(font2, gtog)
 	font2.close()
-
 def cksploc():
 	cmap=font.getBestCmap()
 	spdic={cmap[ord(ch)]:glfrloc(cmap[ord(ch)], loczhs) for ch in simpcn}
@@ -608,7 +583,6 @@ def cksploc():
 				for spgs in spdic:
 					if spgs in tabl:
 						tabl[spgs]=spdic[spgs]
-
 def changeloc():
 	lkzhs=locllki(font["GSUB"], 'ZHS')
 	lkzht=locllki(font["GSUB"], 'ZHT')
@@ -717,6 +691,30 @@ def dfltvt(lng):
 				if font[posub].table.FeatureList.FeatureRecord[lsr].FeatureTag=='locl':
 					font[posub].table.FeatureList.FeatureRecord[lsr].Feature.LookupListIndex.clear()
 					break
+def uvsnone(font, nonone):
+	cmap=font.getBestCmap()
+	for table in font["cmap"].tables:
+		if table.format==14:
+			for vsl in table.uvsDict.keys():
+				newl=list()
+				for cg in table.uvsDict[vsl]:
+					if cg[1]==None and nonone:
+						newl.append((cg[0], cmap[cg[0]]))
+					elif cg[0] in cmap and cg[1]==cmap[cg[0]] and not nonone:
+						newl.append((cg[0], None))
+					else:
+						newl.append((cg[0], cg[1]))
+				table.uvsDict[vsl]=newl
+def getuvs(cmap):
+	nuv=dict()
+	for table in cmap.tables:
+		if table.format==14:
+			for vsl in table.uvsDict.keys():
+				for cg in table.uvsDict[vsl]:
+					if cg[0] not in nuv:
+						nuv[cg[0]]=dict()
+					nuv[cg[0]][vsl]=cg[1]
+	return nuv
 
 print('*'*50)
 print('====Build Fonts====\n')
@@ -740,37 +738,32 @@ else: raise
 wtn={250:'ExtraLight', 300:'Light', 350:'Normal', 400:'Regular', 500:'Medium', 600:'SemiBold', 700:'Bold', 900:'Heavy'}
 wt=wtn[font['OS/2'].usWeightClass]
 if 'VF' in fpsn: wt='VF'
-
-jpvar=getjpv()
+cffinf()
+uvsnone(font, True)
+newmap=dict()
 print('Getting the localized lookups table...')
 lockor, loczhs, loczht, loczhh=getloclk(font, 'KOR'), getloclk(font, 'ZHS'), getloclk(font, 'ZHT'), getloclk(font, 'ZHH')
-locgls=locglrpl()
+locglrpl(newmap)
 print('Getting uvs...')
-uvdic, uvgls=uvstab()
-print('Processing localized glyphs...')
-glyrepl(locgls)
+uvdic=getuvs(font['cmap'])
 print('Processing locl Variant ...')
-locvar()
-for jco in jpvar.keys():
-	setcg(jco, jpvar[jco])
+locvar(newmap)
 print('Processing uvs glyphs...')
-setuvs()
+setuvs(newmap, uvdic)
 print('Processing uvs Variant...')
-uvsvar()
-ftuvstab()
+uvsvar(newmap, uvdic)
 print('Processing radicals...')
-radicv()
-
+for c, g in newmap.items():
+	print('Remap', chr(c))
+	setcg(font['cmap'], c, g)
 ckdlg()
 print('Getting glyphs from other fonts...')
 merge(subfl)
-
 cksploc()
-
 print('Checking for unused glyphs...')
 subgl()
 changeloc()
-
+uvsnone(font, False)
 font['name']=mkname('', ithw='')
 print('Saving font...')
 font.save(outfile)
