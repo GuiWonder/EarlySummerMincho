@@ -1,13 +1,10 @@
 import os, json, sys
 from fontTools.ttLib import TTFont, newTable
+from hpsh import *
 
 pydir=os.path.abspath(os.path.dirname(__file__))
 cfg=json.load(open(os.path.join(pydir, 'configs/config.json'), 'r', encoding='utf-8'))
 
-def setcg(cmap, code, glyf):
-	for table in cmap.tables:
-		if (table.format==4 and code<=0xFFFF) or table.format==12 or code in table.cmap:
-			table.cmap[code]=glyf
 def glfrtxt(txt):
 	cmap=font.getBestCmap()
 	glys=list()
@@ -200,29 +197,62 @@ def subcff(cfftb, glyphs):
 		fontsub.numGlyphs=len(fontsub.charset)
 def cffinf():
 	if 'CFF ' in font:
-		cff=font["CFF "]
-		cff.cff.fontNames[0]=cff.cff.fontNames[0].replace('SourceHan', cfg['fontName'].replace(' ', ''))
-		cff.cff[0].FamilyName=cff.cff[0].FamilyName.replace('Source Han', cfg['fontName'])
-		cff.cff[0].FullName=cff.cff[0].FullName.replace('Source Han', cfg['fontName'])
-		cff.cff[0].Notice=cfg['fontCopyright']
-		cff.cff[0].CIDFontVersion=float(cfg['fontVersion'])
-		for dic in cff.cff[0].FDArray:
-			dic.FontName=dic.FontName.replace('SourceHan', cfg['fontName'].replace(' ', ''))
+		cff=font['CFF '].cff
+		fmln=cfg['fontName']
+		for ss in ('Sans', 'Serif', 'Mono'):
+			if ss in fpsn: fmln+=' '+ss
+		psn=fmln.replace(' ', '')
+		pso=cff.fontNames[0].split('-')[0]
+		fmlo=cff[0].FamilyName
+		cff.fontNames[0]=cff.fontNames[0].replace(pso, psn)
+		cff[0].FamilyName=fmln
+		cff[0].FullName=cff[0].FullName.replace(fmlo, fmln)
+		cff[0].Notice=cfg['fontCopyright']
+		cff[0].CIDFontVersion=float(cfg['fontVersion'])
+		for dic in cff[0].FDArray:
+			dic.FontName=dic.FontName.replace(pso, psn)
 	elif 'glyf' in font:
 		font["head"].yMax = font["hhea"].ascender
 		font["head"].yMin = font["hhea"].descender
+
 def subgl():
 	cmap=font.getBestCmap()
-	'''Remove hanguo'''
+	'''Remove hangul'''
 	font['cmap'].tables=[table for table in font['cmap'].tables if table.format!=14]
 	for table in font["cmap"].tables:
-		table.cmap={code:table.cmap[code] for code in table.cmap if code not in range(0xac00, 0xd7af)}
+		table.cmap={code:table.cmap[code] for code in table.cmap if code not in range(0xa960, 0xd7ff) and code not in range(0x1100, 0x1200) and code not in range(0x2b8b8, 0x2ce94) and code not in range(0x3200, 0x3300)}
 	cmap=font.getBestCmap()
 	rmopty('nlck')
 	rmopty('jp78')
 	rmopty('jp83')
 	rmopty('jp90')
 	rmopty('calt')
+	rmopty('ljmo')
+	rmopty('tjmo')
+	rmopty('vjmo')
+	rmopty('aalt')
+
+	rmlkre=set()
+	for li in range(len(font["GSUB"].table.LookupList.Lookup)):
+		lkp=font["GSUB"].table.LookupList.Lookup[li]
+		for st in lkp.SubTable:
+			if st.LookupType in (5, 6) and hasattr(st, 'SubstLookupRecord'):
+				rmlkre.add(li)
+				break
+
+	usdlk=set()
+	for ftr in font["GSUB"].table.FeatureList.FeatureRecord:
+		ftr.Feature.LookupListIndex=[idx for idx in ftr.Feature.LookupListIndex if idx not in rmlkre]
+		usdlk.update(ftr.Feature.LookupListIndex)
+
+	usdlkex=set()
+	rmlkex=list()
+	for ilk in range(len(font["GSUB"].table.LookupList.Lookup)):
+		if ilk not in usdlk:
+			rmlkex.append(ilk)
+	rmlkex.sort(reverse=True)
+	for i in rmlkex: rmlk(font, 'GSUB', i)
+
 	usedg=set()
 	usedg.add('.notdef')
 	usedg.update(cmap.values())
@@ -330,184 +360,7 @@ def subgl():
 	elif 'glyf' in font:
 		font['glyf'].glyphs={g:font['glyf'].glyphs[g] for g in set(nnnd)}
 	font.setGlyphOrder(nnnd)
-def mkname(locn, ithw=''):
-	if locn: locn=' '+locn
-	if 'VF' in fpsn: return vfname(locn, ithw)
-	else: return nfname(locn, ithw)
-def nfname(locn, ithw=''):
-	if not font["name"].getDebugName(17):
-		wt=font["name"].getDebugName(2)
-	else:
-		wt=font["name"].getDebugName(17)
-	isit='Italic' in wt or 'it' in ithw.lower()
-	wt=wt.replace('Italic', '').strip()
-	if not wt: wt='Regular'
-	ishw='HW' in fpsn or 'hw' in ithw.lower()
-	itml, itm, hwm=str(), str(), str()
-	if ishw: hwm=' HW'
-	if isit: itml, itm=' Italic', 'It'
-	if 'Sans' in fpsn:
-		fmlName=cfg['fontName']+' Sans'+hwm+locn
-		scn=cfg['fontNameSC']+'黑体'+locn.strip()+hwm
-		tcn=cfg['fontNameTC']+'黑體'+locn.strip()+hwm
-		jpn=cfg['fontNameJP']+'ゴシック'+locn.strip()+hwm
-	elif 'Serif' in fpsn:
-		fmlName=cfg['fontName']+' Serif'+hwm+locn
-		scn=cfg['fontNameSC']+'明朝体'+locn.strip()+hwm
-		tcn=cfg['fontNameTC']+'明朝體'+locn.strip()+hwm
-		jpn=cfg['fontNameJP']+'明朝'+locn.strip()+hwm
-	elif 'Mono' in fpsn:
-		fmlName=cfg['fontName']+' Mono'+hwm+locn
-		scn=cfg['fontNameSC']+'等宽'+locn.strip()+hwm
-		tcn=cfg['fontNameTC']+'等寬'+locn.strip()+hwm
-		jpn=cfg['fontNameJP']+'等幅'+locn.strip()+hwm
-	#elif 'Rounded' in fpsn:
-	#	fmlName=cfg['fontName']+' Rounded'+hwm+locn
-	#	scn=cfg['fontNameSC']+'圆角'+locn.strip()+hwm
-	#	tcn=cfg['fontNameTC']+'圓角'+locn.strip()+hwm
-	else: raise
-	ftName=fmlName
-	ftNamesc=scn
-	ftNametc=tcn
-	ftNamejp=jpn
-	if wt not in ('Regular', 'Bold'):
-		ftName+=' '+wt
-		ftNamesc+=' '+wt
-		ftNametc+=' '+wt
-		ftNamejp+=' '+wt
-	subfamily='Regular'
-	if isit:
-		if wt=='Bold':
-			subfamily='Bold Italic'
-		else:
-			subfamily='Italic'
-	elif wt=='Bold':
-		subfamily='Bold'
-	psName=fmlName.replace(' ', '')+'-'+fpsn.split('-')[-1].replace('It', '')+itm
-	uniqID=cfg['fontVersion']+';'+cfg['fontID'].strip()+';'+psName
-	#if wt=='Bold':
-	if wt in ('Regular', 'Bold') and not (isit and wt=='Regular'):
-		fullName=ftName+' '+wt+itml
-		fullNamesc=ftNamesc+' '+wt+itml
-		fullNametc=ftNametc+' '+wt+itml
-		fullNamejp=ftNamejp+' '+wt+itml
-	else:
-		fullName=ftName+itml
-		fullNamesc=ftNamesc+itml
-		fullNametc=ftNametc+itml
-		fullNamejp=ftNamejp+itml
-	newnane=newTable('name')
-	newnane.setName(cfg['fontCopyright'], 0, 3, 1, 1033)
-	newnane.setName(ftName, 1, 3, 1, 1033)
-	newnane.setName(subfamily, 2, 3, 1, 1033)
-	newnane.setName(uniqID, 3, 3, 1, 1033)
-	newnane.setName(fullName, 4, 3, 1, 1033)
-	newnane.setName('Version '+cfg['fontVersion'], 5, 3, 1, 1033)
-	newnane.setName(psName, 6, 3, 1, 1033)
-	newnane.setName(cfg['fontDesigner'], 9, 3, 1, 1033)
-	newnane.setName(cfg['fontDiscript'], 10, 3, 1, 1033)
-	newnane.setName(cfg['fontVURL'], 11, 3, 1, 1033)
-	newnane.setName(font["name"].getDebugName(13), 13, 3, 1, 1033)
-	newnane.setName(font["name"].getDebugName(14), 14, 3, 1, 1033)
-	if wt not in ('Regular', 'Bold'):
-		newnane.setName(fmlName, 16, 3, 1, 1033)
-		newnane.setName(wt+itml, 17, 3, 1, 1033)
-	for lanid in (1028, 3076):
-		newnane.setName(ftNametc, 1, 3, 1, lanid)
-		newnane.setName(subfamily, 2, 3, 1, lanid)
-		newnane.setName(fullNametc, 4, 3, 1, lanid)
-		if wt not in ('Regular', 'Bold'):
-			newnane.setName(tcn, 16, 3, 1, lanid)
-			newnane.setName(wt+itml, 17, 3, 1, lanid)
-	newnane.setName(ftNamesc, 1, 3, 1, 2052)
-	newnane.setName(subfamily, 2, 3, 1, 2052)
-	newnane.setName(fullNamesc, 4, 3, 1, 2052)
-	if wt not in ('Regular', 'Bold'):
-		newnane.setName(scn, 16, 3, 1, 2052)
-		newnane.setName(wt+itml, 17, 3, 1, 2052)
-	newnane.setName(ftNamejp, 1, 3, 1, 1041)
-	newnane.setName('Regular', 2, 3, 1, 1041)
-	newnane.setName(ftNamejp, 4, 3, 1, 1041)
-	newnane.setName('ExtraLight', 17, 3, 1, 1041)
-	if wt not in ('Regular', 'Bold'):
-		newnane.setName(jpn, 16, 3, 1, 1041)
-		newnane.setName(wt+itml, 17, 3, 1, 1041)
-	return newnane
-def vfname(locn, hw=''):
-	ishw='hw' in hw.lower()
-	hwm=str()
-	if ishw: hwm=' HW'
-	if 'Sans' in fpsn:
-		fmlName=cfg['fontName']+' Gothic'+hwm+locn
-		scn=cfg['fontNameSC']+'黑体'+locn.strip()+hwm+' VF'
-		tcn=cfg['fontNameTC']+'黑體'+locn.strip()+hwm+' VF'
-		jpn=cfg['fontNameJP']+'ゴシック'+locn.strip()+hwm+' VF'
-	elif 'Serif' in fpsn:
-		fmlName=cfg['fontName']+' Serif'+hwm+locn
-		scn=cfg['fontNameSC']+'明朝体'+locn.strip()+hwm+' VF'
-		tcn=cfg['fontNameTC']+'明朝體'+locn.strip()+hwm+' VF'
-		jpn=cfg['fontNameJP']+'明朝'+locn.strip()+hwm+' VF'
-	elif 'Mono' in fpsn:
-		fmlName=cfg['fontName']+' Mono'+hwm+locn
-		scn=cfg['fontNameSC']+'等宽'+locn.strip()+hwm+' VF'
-		tcn=cfg['fontNameTC']+'等寬'+locn.strip()+hwm+' VF'
-		jpn=cfg['fontNameJP']+'等幅'+locn.strip()+hwm+' VF'
-	else:
-		raise
-	ftNamesc=scn
-	ftNametc=tcn
-	ftNamejp=jpn
 
-	rpln=[
-		('Source Han Sans', fmlName), 
-		('Source Han Serif', fmlName), 
-		('SourceHanSans', fmlName.replace(' ', '')), 
-		('SourceHanSerif', fmlName.replace(' ', '')), 
-	]
-	psName=fpsn
-	for rp in rpln:
-		 psName=psName.replace(rp[0], rp[1])
-	uniqID=cfg['fontVersion']+';'+cfg['fontID'].strip()+';'+psName
-	newnane=newTable('name')
-	newnane.names=list()
-	for n1 in font['name'].names:
-		nstr=str()
-		if n1.langID==0x411:
-			continue
-		if n1.nameID==0:
-			nstr=cfg['fontCopyright']
-		elif n1.nameID==3:
-			nstr=uniqID
-		elif n1.nameID==5:
-			nstr='Version '+cfg['fontVersion']
-		elif n1.nameID==9:
-			nstr=cfg['fontDesigner']
-		elif n1.nameID==10:
-			nstr=cfg['fontDiscript']
-		elif n1.nameID==11:
-			nstr=cfg['fontVURL']
-		elif n1.nameID in (7, 8):
-			continue
-		else:
-			nstr=str(n1)
-			for rp in rpln:
-				 nstr=nstr.replace(rp[0], rp[1])
-		newnane.setName(nstr, n1.nameID, n1.platformID, n1.platEncID, n1.langID)
-	for lanid in (1028, 3076):
-		newnane.setName(ftNametc, 1, 3, 1, lanid)
-		newnane.setName('Regular', 2, 3, 1, lanid)
-		newnane.setName(ftNametc, 4, 3, 1, lanid)
-		newnane.setName('ExtraLight', 17, 3, 1, lanid)
-	newnane.setName(ftNamesc, 1, 3, 1, 2052)
-	newnane.setName('Regular', 2, 3, 1, 2052)
-	newnane.setName(ftNamesc, 4, 3, 1, 2052)
-	newnane.setName('ExtraLight', 17, 3, 1, 2052)
-	
-	newnane.setName(ftNamejp, 1, 3, 1, 1041)
-	newnane.setName('Regular', 2, 3, 1, 1041)
-	newnane.setName(ftNamejp, 4, 3, 1, 1041)
-	newnane.setName('ExtraLight', 17, 3, 1, 1041)
-	return newnane
 def getother(font2, repdict):
 	print('Processing...')
 	if 'CFF ' in font or 'CFF2' in font:
@@ -558,7 +411,6 @@ def merge(ft):
 			g1=glfrloc(cmap[ncd], loczhs)
 		else:
 			g1=cmap[ncd]
-			# chdgl.add(ncd)
 		g2=cmap2[ncd]
 		gtog[g1]=g2
 	loczhsnew=getloclk(font2, 'ZHS')
@@ -570,6 +422,7 @@ def merge(ft):
 
 	getother(font2, gtog)
 	font2.close()
+
 def cksploc():
 	cmap=font.getBestCmap()
 	spdic={cmap[ord(ch)]:glfrloc(cmap[ord(ch)], loczhs) for ch in simpcn}
@@ -580,10 +433,13 @@ def cksploc():
 					tabl=st.ExtSubTable.mapping
 				elif st.LookupType==1:
 					tabl=st.mapping
+				else:
+					continue
 				for spgs in spdic:
 					if spgs in tabl:
 						tabl[spgs]=spdic[spgs]
-def changeloc():
+
+def changeloc(loctg):
 	lkzhs=locllki(font["GSUB"], 'ZHS')
 	lkzht=locllki(font["GSUB"], 'ZHT')
 	lkzhh=locllki(font["GSUB"], 'ZHH')
@@ -614,19 +470,35 @@ def changeloc():
 		oldkc={s:dicst[s] for s in dicst}
 
 	cmap=font.getBestCmap()
-	for k in list(oldtc.keys()):
-		if k in oldsc:
-			oldtc[oldsc[k]]=oldtc[k]
-	for k in list(oldhc.keys()):
-		if k in oldsc:
-			oldhc[oldsc[k]]=oldhc[k]
-	for k in list(oldsc.keys()):
-		if k in cmap.values():
-			newjp[oldsc[k]]=k
-	for k in newjp.keys():
-		for lcs in (oldtc, oldhc, oldkc):
-			if k not in lcs.keys() and k not in lcs.values():
-				lcs[k]=newjp[k]
+	if loctg=='ZHS':
+		for k in list(oldtc.keys()):
+			if k in oldsc:
+				oldtc[oldsc[k]]=oldtc[k]
+		for k in list(oldhc.keys()):
+			if k in oldsc:
+				oldhc[oldsc[k]]=oldhc[k]
+		for k in list(oldsc.keys()):
+			if k in cmap.values():
+				newjp[oldsc[k]]=k
+		for k in newjp.keys():
+			for lcs in (oldtc, oldhc, oldkc):
+				if k not in lcs.keys() and k not in lcs.values():
+					lcs[k]=newjp[k]
+	elif loctg=='ZHT':
+		for k in list(oldsc.keys()):
+			if k in oldtc:
+				oldsc[oldtc[k]]=oldsc[k]
+		for k in list(oldhc.keys()):
+			if k in oldtc:
+				oldhc[oldtc[k]]=oldhc[k]
+		for k in list(oldtc.keys()):
+			if k in cmap.values():
+				newjp[oldtc[k]]=k
+		for k in newjp.keys():
+			for lcs in (oldsc, oldhc, oldkc):
+				if k not in lcs.keys() and k not in lcs.values():
+					lcs[k]=newjp[k]
+	
 	ftl, lkl=list(), list()
 	for sr in font["GSUB"].table.ScriptList.ScriptRecord:
 		for lsr in sr.Script.LangSysRecord:
@@ -636,16 +508,31 @@ def changeloc():
 		ftg=font["GSUB"].table.FeatureList.FeatureRecord[ki].FeatureTag
 		if ftg=='locl':
 			font["GSUB"].table.FeatureList.FeatureRecord[ki].Feature.LookupListIndex=newjpft
-	setpun(pzhs+simpcn, loczhs)
 
-	for dcs in (oldtc, oldhc, newjp, oldkc):
+	setpun(simpcn, loczhs)
+	if loctg=='ZHS':
+		setpun(pzhs, loczhs)
+	elif loctg=='ZHT':
+		setpun(pzht, loczht)
+	elif loctg=='ZHH':
+		setpun(pzht, loczhh)
+
+	if loctg=='ZHS': lkps=(oldtc, oldhc, newjp, oldkc)
+	elif loctg=='ZHT': lkps=(oldsc, oldhc, newjp, oldkc)
+	for dcs in lkps:
 		for k in list(dcs.keys()):
 			if k==dcs[k]: del dcs[k]
 
-	for st in font["GSUB"].table.LookupList.Lookup[lkzht[0]].SubTable:
-		if st.LookupType==7: stbl=st.ExtSubTable
-		else: stbl=st
-		stbl.mapping=oldtc
+	if loctg!='ZHT':
+		for st in font["GSUB"].table.LookupList.Lookup[lkzht[0]].SubTable:
+			if st.LookupType==7: stbl=st.ExtSubTable
+			else: stbl=st
+			stbl.mapping=oldtc
+	if loctg!='ZHS':
+		for st in font["GSUB"].table.LookupList.Lookup[lkzhs[0]].SubTable:
+			if st.LookupType==7: stbl=st.ExtSubTable
+			else: stbl=st
+			stbl.mapping=oldsc
 	for st in font["GSUB"].table.LookupList.Lookup[lkzhh[0]].SubTable:
 		if st.LookupType==7: stbl=st.ExtSubTable
 		else: stbl=st
@@ -659,7 +546,7 @@ def changeloc():
 		else: stbl=st
 		stbl.mapping=oldkc
 
-	dfltvt('ZHS')
+	dfltvt(loctg)
 def setpun(pzh, loczh):
 	pg=glfrtxt(pzh)
 	rplg=dict()
@@ -691,6 +578,34 @@ def dfltvt(lng):
 				if font[posub].table.FeatureList.FeatureRecord[lsr].FeatureTag=='locl':
 					font[posub].table.FeatureList.FeatureRecord[lsr].Feature.LookupListIndex.clear()
 					break
+
+def rmloc():
+	loclks, locfts=list(), list()
+	for i in range(len(font["GSUB"].table.FeatureList.FeatureRecord)):
+		if font["GSUB"].table.FeatureList.FeatureRecord[i].FeatureTag=='locl':
+			loclks+=font["GSUB"].table.FeatureList.FeatureRecord[i].Feature.LookupListIndex
+			locfts.append(i)
+	loclks=list(set(loclks))
+	loclks.sort(reverse=True)
+	locfts=list(set(locfts))
+	locfts.sort(reverse=True)
+	for i in locfts: rmft(font, 'GSUB', i)
+	for i in loclks: rmlk(font, 'GSUB', i)
+	for posub in ('GSUB', 'GPOS'):
+		for sr in font[posub].table.ScriptList.ScriptRecord:
+			sr.Script.LangSysRecord.clear()
+def mulcdch():
+	cmap=font.getBestCmap()
+	with open(os.path.join(pydir, 'configs/mulcodechar.dt'), 'r', encoding='utf-8') as f:
+		for line in f.readlines():
+			litm=line.split('#')[0].strip()
+			if '-' not in litm: continue
+			s, t=litm.split(' ')[0].split('-')
+			s, t=s.strip(), t.strip()
+			if s and t and s!=t and ord(t) in cmap:
+				print('Processing '+s+'-'+t)
+				setcg(ord(s), cmap[ord(t)])
+
 def uvsnone(font, nonone):
 	cmap=font.getBestCmap()
 	for table in font["cmap"].tables:
@@ -719,8 +634,8 @@ def getuvs(cmap):
 print('*'*50)
 print('====Build Fonts====\n')
 infile=sys.argv[1]
-outfile=sys.argv[2]
-subfl=sys.argv[3]
+subfl=sys.argv[2]
+outfile=sys.argv[3]
 
 pen='"\'—‘’‚“”„‼⁇⁈⁉⸺⸻'
 pzhs='·’‘”“•≤≥≮≯！：；？'+pen
@@ -729,18 +644,11 @@ simpcn='残浅践惮禅箪蝉径茎滞遥瑶写泻画'#恋峦蛮挛栾滦弯湾#
 
 font=TTFont(infile)
 fpsn=font["name"].getDebugName(6)
-ssty=str()
-if 'Sans' in fpsn or 'Mono' in fpsn: ssty='Sans'
-elif 'Serif' in fpsn: ssty='Serif'
-if 'CFF ' in font or 'CFF2' in font: exn='.otf'
-elif 'glyf' in font: exn='.ttf'
-else: raise
-wtn={250:'ExtraLight', 300:'Light', 350:'Normal', 400:'Regular', 500:'Medium', 600:'SemiBold', 700:'Bold', 900:'Heavy'}
-wt=wtn[font['OS/2'].usWeightClass]
-if 'VF' in fpsn: wt='VF'
+
 cffinf()
 uvsnone(font, True)
 newmap=dict()
+
 print('Getting the localized lookups table...')
 lockor, loczhs, loczht, loczhh=getloclk(font, 'KOR'), getloclk(font, 'ZHS'), getloclk(font, 'ZHT'), getloclk(font, 'ZHH')
 locglrpl(newmap)
@@ -753,18 +661,23 @@ setuvs(newmap, uvdic)
 print('Processing uvs Variant...')
 uvsvar(newmap, uvdic)
 print('Processing radicals...')
+
 for c, g in newmap.items():
-	print('Remap', chr(c))
 	setcg(font['cmap'], c, g)
+
 ckdlg()
 print('Getting glyphs from other fonts...')
 merge(subfl)
+
 cksploc()
+
 print('Checking for unused glyphs...')
 subgl()
-changeloc()
+changeloc('ZHT')
+
 uvsnone(font, False)
-font['name']=mkname('', ithw='')
+isvf=('gvar' in font or 'CFF2' in font) and 'fvar' in font
+font['name']=mkname(cfg, font['name'], '', ithw='', isvf=isvf)
 print('Saving font...')
 font.save(outfile)
 print('Finished!')

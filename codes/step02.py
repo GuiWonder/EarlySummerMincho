@@ -3,13 +3,21 @@ from fontTools.ttLib import newTable
 import sys
 
 def run(infile, outfile, wt):
-    uswt={'ExtraLight':'250', 'Light':'300', 'Regular':'400', 'Medium':'500', 'SemiBold':'600', 'Bold':'700', 'Heavy':'900'}
+    ttft=TTFont(infile)
+    insname=dict()
+    for ins in ttft['fvar'].instances:
+        name=ttft['name'].getDebugName(ins.subfamilyNameID)
+        if 'wght' not in ins.coordinates: continue
+        wght=ins.coordinates['wght']
+        insname[name]=wght
+    ttft.close()
+    
     args=['--no-recalc-timestamp', 
     '--remove-overlaps', 
     #'--update-name-table', 
     '-o', outfile, 
     infile, 
-    f'wght={uswt[wt]}']
+    f'wght={insname[wt]}']
     
     """Partially instantiate a variable font"""
     infile_notuse, axisLimits, options = parseArgs(args)
@@ -27,13 +35,14 @@ def run(infile, outfile, wt):
         axisTag for axisTag, limit in axisLimits.items() if not isinstance(limit, tuple)
     }.issuperset(axis.axisTag for axis in varfont["fvar"].axes)
 
-    instantiateVariableFont(
+    varfont = instantiateVariableFont(
         varfont,
         axisLimits,
         inplace=True,
         optimize=options.optimize,
         overlap=options.overlap,
         updateFontNames=options.update_name_table,
+        downgradeCFF2=options.downgrade_cff2,
     )
 
     suffix = "-instance" if isFullInstance else "-partial"
@@ -79,7 +88,6 @@ def setrbbb(font, stylename):
         selection |= 1 << 0
         selection |= 1 << 5
     font["OS/2"].fsSelection = selection
-
 
 def fixname(nameobj, wt):
     newnane=newTable('name')

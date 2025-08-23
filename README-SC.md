@@ -20,6 +20,7 @@
 
 ## 鸣谢
 - [思源宋体](https://github.com/adobe-fonts/source-han-serif)
+- [Noto CJK fonts](https://github.com/notofonts/noto-cjk)
 - [FontTools](https://github.com/fonttools/fonttools)
 - [AFDKO](https://github.com/adobe-type-tools/afdko/)
 - [FontForge](https://github.com/fontforge/fontforge)
