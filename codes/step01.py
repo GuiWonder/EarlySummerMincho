@@ -217,10 +217,17 @@ def cffinf():
 
 def subgl():
 	cmap=font.getBestCmap()
-	'''Remove hangul'''
+	hangul=set()
+	hangul.update(range(0x1100, 0x11FF+1))
+	hangul.update(range(0x3130, 0x318F+1))
+	hangul.update(range(0xA960, 0xA97F+1))
+	hangul.update(range(0xAC00, 0xD7FF+1))
+	hangul.update(range(0xFFA0, 0xFFDF+1))
+	hangul.update(range(0x3200, 0x32FF+1))
+	
 	font['cmap'].tables=[table for table in font['cmap'].tables if table.format!=14]
 	for table in font["cmap"].tables:
-		table.cmap={code:table.cmap[code] for code in table.cmap if code not in range(0xa960, 0xd7ff) and code not in range(0x1100, 0x1200) and code not in range(0x2b8b8, 0x2ce94) and code not in range(0x3200, 0x3300)}
+		table.cmap={code:table.cmap[code] for code in table.cmap if code not in hangul}
 	cmap=font.getBestCmap()
 	rmopty('nlck')
 	rmopty('jp78')
@@ -640,7 +647,7 @@ outfile=sys.argv[3]
 pen='"\'—‘’‚“”„‼⁇⁈⁉⸺⸻'
 pzhs='·’‘”“•≤≥≮≯！：；？'+pen
 pzht='·’‘”“•、。，．'+pen
-simpcn='残浅践惮禅箪蝉径茎滞遥瑶写泻画'#恋峦蛮挛栾滦弯湾#変蒋将与弥称
+simpcn='蒋将残浅践惮禅箪蝉径茎滞遥瑶写泻画'#恋峦蛮挛栾滦弯湾#変与弥称
 
 font=TTFont(infile)
 fpsn=font["name"].getDebugName(6)
