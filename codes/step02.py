@@ -58,8 +58,6 @@ def run(infile, outfile, wt):
         "instance" if isFullInstance else "partial variable",
         outfile,
     )
-    varfont["head"].yMax = varfont["hhea"].ascender
-    varfont["head"].yMin = varfont["hhea"].descender
     varfont.save(outfile)
 
 def setrbbb(font, stylename):

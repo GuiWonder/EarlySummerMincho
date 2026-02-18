@@ -1,12 +1,42 @@
 {
-    "fontName": "Early Summer",
-    "fontNameTC": "初夏",
-    "fontNameSC": "初夏",
-    "fontNameJP": "初夏",
-    "fontVersion": "1.006",
-    "fontID": "GUIW",
-    "fontVURL": "https://github.com/GuiWonder/EarlySummerSerif",
-    "fontCopyright": "© 2023-2025 Early Summer Fonts.",
-    "fontDesigner": "GuiWonder",
-    "fontDiscript": "Serif font"
+    "Name": "Early Summer",
+    "Version": "1.007",
+    "ID": "GUIW",
+    "VURL": "https://github.com/GuiWonder/EarlySummerSerif",
+    "Copyright": "© 2023-{year} {name} Fonts.",
+    "Designer": "GuiWonder",
+    "Discript": "",
+    "TC":
+        {
+            "Name": "初夏",
+            "Sans":"黑體",
+            "Serif":"明朝體",
+            "Mono":"等寬",
+            "Round":"圓體",
+            "ST":"簡轉繁",
+            "VF":"可變字體",
+            "Format":"格式"
+        },
+    "SC":
+        {
+            "Name": "初夏",
+            "Sans":"黑体",
+            "Serif":"明朝体",
+            "Mono":"等宽",
+            "Round":"圆体",
+            "ST":"简转繁",
+            "VF":"可变字体",
+            "Format":"格式"
+        },
+    "JA":
+        {
+            "Name": "初夏",
+            "Sans":"角ゴシック",
+            "Serif":"明朝",
+            "Mono":"等幅",
+            "Round":"丸ゴシック",
+            "ST":"簡転繁",
+            "VF":"バリアブル",
+            "Format":"形式"
+        }
 }
